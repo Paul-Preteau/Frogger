@@ -4,7 +4,6 @@
 #include "console.h"
 #include "indexed_list.h"
 
-
 #define NUM_SCREEN_THREADS 1
 #define NUM_TOP_LOG_THREADS 1
 
@@ -16,6 +15,7 @@ static char *frog_eyes_closed[] = {"--", "<>"};
 
 
 static pthread_t threads[100000];
+static pthread_t main_threads[4];
 int t=0;
 
 static boolean game_running = TRUE;
@@ -50,7 +50,7 @@ List *middle_bot_log_list;
 List *bot_log_list;
 
 
-
+void *create_logs();
 
 
 
@@ -68,23 +68,14 @@ int main(int argc, char*argv[]) {
   bot_log_list = construct();
   assert(bot_log_list != NULL);
 
+  int t = 0;
+
 
 	if (screen_init(40, 80)) {
 
-    create_logs();
+	pthread_create(&threads[t], NULL, create_logs, NULL);
+	t++;
 
-    enum LOG_TYPE logB = TOP; 
-    create_log_thread(logB);
-    logB = MIDDLE_TOP;
-    create_log_thread(logB);
-    logB = MIDDLE_BOT;
-    create_log_thread(logB);
-    logB = BOT;
-    create_log_thread(logB);
-
-    //create_frog_thread();
-    //create_eyes_thread();
-    //create_keyboard_thread();
     start_screen_thread();
     while(1){
       //here should wait for a signal
@@ -95,7 +86,7 @@ int main(int argc, char*argv[]) {
   return 0;
 }
 
-void create_logs(){
+void *create_logs(){
 
   //create 4 different log threads. 
   //
@@ -108,11 +99,9 @@ void create_logs(){
   logB = BOT;
   create_log_thread(logB);
 
-  mutex_lock(&game_lock);
-  while(game_running){
-    pthread_cont_wait(&logs_cond, &game_lock);
-  }
-  mutex_unlock(&game_lock);
+  //set up condition variables
+  //go to sleep
+  //wake up when a thread dies
 
   //join them together
 
@@ -347,87 +336,35 @@ void create_log_thread(enum LOG_TYPE type){
 
   int rc = 0;
 
+  pthread_mutex_t mutex;     
+  pthread_mutex_init(&mutex, NULL);
+  Log *temp; 
+  temp = malloc( sizeof ( Log ) );
+  temp->hasFrog = FALSE;
+  temp->logID = getNextLogInId();
+  temp->log_mutex = mutex;
+  temp->x = SCR_TOP+4;
+  temp->y = 0;
+
   for(t=0; t<NUM_TOP_LOG_THREADS; t++){
     
     if(type == TOP){
-
-      pthread_mutex_t mutex;     
-      pthread_mutex_init(&mutex, NULL);
-
-      //allocate a log struct, set it up, addd to a list
-      //
-      Log *temp; 
-      temp = malloc( sizeof ( Log ) );
-      temp->hasFrog = FALSE;
-      temp->logID = getNextLogInId();
-      temp->log_mutex = mutex;
-      //temp->type = TOP;
-      temp->x = SCR_TOP+4;
-      temp->y = 0;
-
-      //mutex_lock(&top_list_mutex);
-      insert(top_log_list, temp);
-      //mutex_unlock(&top_list_mutex);
-
-
-     rc = pthread_create(&threads[t], NULL, top_log_draw, (void *)temp);
+    temp->x = SCR_TOP+4;
+    insert(top_log_list, temp);
+    rc = pthread_create(&threads[t], NULL, top_log_draw, (void *)temp);
    }else if(type == MIDDLE_TOP){
-
-      pthread_mutex_t mutex;     
-      pthread_mutex_init(&mutex, NULL);
-
-      //allocate a log struct, set it up, addd to a list
-      //
-      Log *temp; 
-      temp = malloc( sizeof ( Log ) );
-      temp->hasFrog = FALSE;
-      temp->logID = getNextLogInId();
-      temp->log_mutex = mutex;
-      //temp->type = TOP;
-      temp->x = SCR_TOP+8;
-      temp->y = 0;
-
-      insert(middle_top_log_list, temp);
-
-    rc = pthread_create(&threads[t], NULL, middletop_log_draw, (void*) temp);
+    temp->x = SCR_TOP+8;
+    insert(middle_top_log_list, temp);
+    rc = pthread_create(&threads[t], NULL, middletop_log_draw, (void *) temp);
   }else if(type == MIDDLE_BOT){
-
-      pthread_mutex_t mutex;     
-      pthread_mutex_init(&mutex, NULL);
-
-      //allocate a log struct, set it up, addd to a list
-      //
-      Log *temp; 
-      temp = malloc( sizeof ( Log ) );
-      temp->hasFrog = FALSE;
-      temp->logID = getNextLogInId();
-      temp->log_mutex = mutex;
-      //temp->type = TOP;
-      temp->x = SCR_TOP+12;
-      temp->y = 0;
-
-      insert(middle_bot_log_list, temp);
-
+    temp->x = SCR_TOP+12;
+    temp->y = 0;
+    insert(middle_bot_log_list, temp);
     rc = pthread_create(&threads[t], NULL, middlebot_log_draw, (void*) temp);
   }else if(type == BOT){
-
-      pthread_mutex_t mutex;     
-      pthread_mutex_init(&mutex, NULL);
-
-      //allocate a log struct, set it up, addd to a list
-      //
-      Log *temp; 
-      temp = malloc( sizeof ( Log ) );
-      temp->hasFrog = FALSE;
-      temp->logID = getNextLogInId();
-      temp->log_mutex = mutex;
-      //temp->type = TOP;
-      temp->x = SCR_TOP+16;
-      temp->y = 0;
-
-      insert(bot_log_list, temp);
-
-
+    temp->x = SCR_TOP+16;
+    temp->y = 0;
+    insert(bot_log_list, temp);
     rc = pthread_create(&threads[t], NULL, bot_log_draw, (void*) temp);
   }   
   if (rc){
