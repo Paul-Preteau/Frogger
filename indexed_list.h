@@ -50,7 +50,6 @@ struct LOG
 
 struct NODE
 {
-	char *string; // needs to be a log struct
 	Log *data; // a log struct pointes
 	Node *next;
 };

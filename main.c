@@ -220,12 +220,18 @@ void *top_log_draw(void *in_log){
     mutex_lock(&screen_mutex); //this might be too much
     screen_clear_image(curr_log->x, SCR_RIGHT-i+1, LOG_WIDTH, LOG_HEIGHT);
     screen_draw_image(curr_log->x, SCR_RIGHT-i, log_image, LOG_HEIGHT);
+    if(curr_log->hasFrog == TRUE){
+    	//lock frog mutex
+    	frog_y = frog_y++;
+    	//unlock frog mutex
+    }
     //int result = checkForFrogLeft(SCR_TOP+4, SCR_RIGHT-i);
     mutex_unlock(&screen_mutex); //this might be too much 
     unlock_list( top_log_list );
    
 
-    if(i == 27*2){ //make a constant somewhere
+    if(i == 27*2){ //make a constant somewhere - DISTANCE_BETWEEN_LOGS
+    	//send signal back to main log thread
       enum LOG_TYPE logB = TOP; 
       create_log_thread(logB);
     }
@@ -233,6 +239,7 @@ void *top_log_draw(void *in_log){
     sleep_ticks(2);
   }
   removeWithId(top_log_list, curr_log->logID);
+  //I'm done, remove me and join me. 
   pthread_exit(NULL);//kill a log thread
   
 }
