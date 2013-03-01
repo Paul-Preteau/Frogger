@@ -1,0 +1,2 @@
+gcc -Wall -c console.c
+gcc -Wall -lcurses -Wall main.c console.o
