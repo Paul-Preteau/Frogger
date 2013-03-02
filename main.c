@@ -209,23 +209,12 @@ int checkForFrogLeft(int x, int y){
 int checkForFrogRight(int x, int y){
   int isThere = 0; //it isn't there
 
-  int row = 0;
-  int col = 0;
+  //char *message;
+  //sprintf(message,"log x: %d, y: %d; frog x: %d, y: %d\n", x,y,frog_x,frog_y);
+  //put_banner(message);
 
-  for(row = x; row < (x+LOG_HEIGHT); row++ ){
-    for(col = y; col < (y+LOG_WIDTH); col++){
-
-      //output frogs and logs x and ys for testing
-      //
-      char *message;
-      sprintf(message, "frog x: %d, y: %d; log x: %d, y: %d",frog_x,frog_y,row,col);
-      put_banner(message);
-
-      if(row == frog_x && col == frog_y && isThere == 0){
-        put_banner("frog is on a log");
-        isThere = 1;
-      }
-    }
+  if(frog_y >= y && frog_y <= (y+LOG_WIDTH)){
+    isThere =1;
   }
 
 
@@ -387,8 +376,7 @@ void *bot_log_draw(void *in_log){
     curr_log->y = SCR_RIGHT-i;
     if(curr_log->hasFrog == TRUE){
       mutex_lock(&frog_mutex);
-      frog_y = frog_y++;
-      //frog_y_new++;
+      frog_y_new++;
       mutex_unlock(&frog_mutex);
     }
     mutex_unlock(&screen_mutex);
@@ -670,7 +658,7 @@ void checkLogs(){
       result = checkForFrogRight(curr->x, curr->y);
       if(result == 1){
         curr->hasFrog = TRUE;
-        printf("%s\n", "you got here");
+        
       }else{
         curr->hasFrog = FALSE;
       }
@@ -694,16 +682,19 @@ void *keyboard_listen(){
       int temp = frog_x-4;
 
       if(temp <= SCR_BOTTOM-2 && temp >= SCR_TOP+4){
-        mutex_lock(&kbd_mutex);
+        mutex_lock(&frog_mutex);
         frog_x_new = frog_x-4;
-        mutex_unlock(&kbd_mutex);
+        mutex_unlock(&frog_mutex);
 
       }
+
+
+
       if(frog_level != 5){
         frog_level++; 
       }
-
       checkLogs();
+      
          
     }
 
@@ -724,13 +715,21 @@ void *keyboard_listen(){
       if(temp <= SCR_RIGHT-2 && temp >= SCR_LEFT){
 
 
-        mutex_lock(&kbd_mutex);
+        mutex_lock(&frog_mutex);
         frog_y_new = frog_y-1;
-        mutex_unlock(&kbd_mutex);
+        mutex_unlock(&frog_mutex);
       }
+
+      checkLogs();
+
+
+
       if(frog_level != 0){
         frog_level--;
       }
+
+
+
     }
 
     if(dig == 'd'){
