@@ -204,6 +204,17 @@ void display_Id(List *list){
     printf("\n");
 }
 
+Log* get(List *list, int position){
+  Node *curr = list->top;
+  int count = 0;
+  while(count != position){
+    count++;
+    curr=curr->next;
+  }
+
+  return curr->data;
+}
+
 
 // calculates the number of nodes in a list
 int node_count( List *list )
