@@ -18,7 +18,7 @@ static char *frog_eyes_closed[] = {"--", "<>"};
 static pthread_t threads[100000];
 static pthread_t main_threads[4];
 static pthread_t log_threads[4];
-static pthread_t 
+
 int t=0;
 
 static boolean game_running = TRUE;
@@ -125,6 +125,8 @@ void *create_logs(){
   int t = 0;
   int rc = 0;
   int i = 0;
+
+
   
   rc = pthread_create(&log_threads[t], NULL, create_top_logs, NULL);
   checkResults("Failed at top log thread create with val: ", rc);
@@ -138,9 +140,9 @@ void *create_logs(){
   checkResults("Failed at top log thread create with val: ", rc);
   t++;
 
-  rc = pthread_create(&log_threads[t], NULL, create_bot_logs, NULL);
+  /*rc = pthread_create(&log_threads[t], NULL, create_bot_logs, NULL);
   checkResults("Failed at top log thread create with val: ", rc);
-  t++;
+  t++;*/
 
   mutex_lock(&game_lock);
    while(game_running){
@@ -257,9 +259,6 @@ void *top_log_draw(void *in_log){
 
   for(i=0; i < SCR_WIDTH + LOG_WIDTH; i++){
 
-
-    //lock_list( top_log_list );
-    mutex_lock(&curr_log->log_mutex);
     mutex_lock(&screen_mutex); //this might be too much
     screen_clear_image(curr_log->x, SCR_RIGHT-i+1, LOG_WIDTH, LOG_HEIGHT);
     screen_draw_image(curr_log->x, SCR_RIGHT-i, log_image, LOG_HEIGHT);
@@ -268,54 +267,65 @@ void *top_log_draw(void *in_log){
     	frog_y = frog_y++;
     	//unlock frog mutex
     }
-    //int result = checkForFrogLeft(SCR_TOP+4, SCR_RIGHT-i);
     mutex_unlock(&screen_mutex); //this might be too much 
-    mutex_unlock(&curr_log->log_mutex);
-    //unlock_list( top_log_list );
 
 
     if(i == 27*2){ //make a constant somewhere - DISTANCE_BETWEEN_LOGS
     	//send signal back to main log thread
-      enum LOG_TYPE logB = TOP; 
-      create_log_thread(logB);
+      curr_log->newLog = 1;
+      mutex_lock(&curr_log->new_log_mutex);
+      int rc = pthread_cond_broadcast(&curr_log->new_log_cond);
+      checkResults("Failed to signal in log: ", rc);
+      mutex_unlock(&curr_log->new_log_mutex);
     }
     
     sleep_ticks(2);
   }
-  removeWithId(top_log_list, curr_log->logID);
-  //I'm done, pass the pointer of the struct back to creator
+ 
+  //I'm done, signal to delete me
   //
-  pthread_exit(NULL);//kill a log thread
-  
+  curr_log->conditionMet=1;
+  mutex_lock(&curr_log->log_mutex);
+  int rc = pthread_cond_broadcast(&curr_log->log_cond);
+  checkResults("Failed to signal in log: ", rc);
+  mutex_unlock(&curr_log->log_mutex);
+  return NULL;
 }
 
 void *middletop_log_draw(void *in_log){
 
   Log *curr_log=in_log;
-  
-  int i = 0;
+  int i;
 
   for(i=SCR_WIDTH + LOG_WIDTH; i > -1; i--){
 
-    mutex_lock(&curr_log->log_mutex);
     mutex_lock(&screen_mutex);
 
     screen_clear_image(SCR_TOP+8, SCR_RIGHT-i-1, LOG_WIDTH, LOG_HEIGHT);
     screen_draw_image(SCR_TOP+8, SCR_RIGHT-i, log_image, LOG_HEIGHT);
-    
+    if(curr_log->hasFrog == TRUE){
+      //lock frog mutex
+      frog_y = frog_y++;
+      //unlock frog mutex
+    }
     mutex_unlock(&screen_mutex);
-    mutex_unlock(&curr_log->log_mutex);
 
     if(i == 27*2){ //make a constant somewhere
-      enum LOG_TYPE logB = MIDDLE_TOP; 
-      create_log_thread(logB);
+      curr_log->newLog = 1;
+      mutex_lock(&curr_log->new_log_mutex);
+      int rc = pthread_cond_broadcast(&curr_log->new_log_cond);
+      checkResults("Failed to signal in log: ", rc);
+      mutex_unlock(&curr_log->new_log_mutex);
     }
     sleep_ticks(3);
   }
   
-  removeWithId(middle_top_log_list, curr_log->logID);
-  pthread_exit(NULL);//kill a log thread
-  
+  curr_log->conditionMet=1;
+  mutex_lock(&curr_log->log_mutex);
+  int rc = pthread_cond_broadcast(&curr_log->log_cond);
+  checkResults("Failed to signal in log: ", rc);
+  mutex_unlock(&curr_log->log_mutex);
+  return NULL;
 }
 
 void *middlebot_log_draw(void *in_log){
@@ -337,7 +347,7 @@ void *middlebot_log_draw(void *in_log){
 
     if(i == 27*2){ //make a constant somewhere
       enum LOG_TYPE logB = MIDDLE_BOT; 
-      create_log_thread(logB);
+      //create_log_thread(logB);
     }
 
     sleep_ticks(4);
@@ -369,7 +379,7 @@ void *bot_log_draw(void *in_log){
 
     if(i == 27*2){ //make a constant somewhere
       enum LOG_TYPE logB = BOT; 
-      create_log_thread(logB);
+      //create_log_thread(logB);
     }
     sleep_ticks(5);
   }
@@ -383,13 +393,19 @@ void *bot_log_draw(void *in_log){
 Log* generateDefaultLog(){
   int rc = 0;
 
-  pthread_mutex_t mutex;     
-  pthread_mutex_init(&mutex, NULL);
+
+
+  pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
   Log *temp; 
   temp = malloc( sizeof ( Log ) );
   temp->hasFrog = FALSE;
   temp->logID = getNextLogInId();
   temp->log_mutex = mutex;
+  temp->new_log_mutex = mutex;
+  pthread_cond_init(&temp->log_cond, NULL);
+  pthread_cond_init(&temp->new_log_cond, NULL);
+  temp->conditionMet = 0;
+  temp->newLog = 0;
   temp->x = 0;
   temp->y = 0;
 
@@ -398,60 +414,126 @@ Log* generateDefaultLog(){
 
 void *create_top_logs(){
 
-
-
-  Log* top_log = generateDefaultLog();
-
-  temp->x = SCR_TOP+4;
-  insert(top_log_list, temp);
-
-  rc = pthread_create(&threads[t], NULL, top_log_draw, (void *)temp);
-
-
-}
-
-
-void create_log_thread(enum LOG_TYPE type){
-
   int rc = 0;
 
-  pthread_mutex_t mutex;     
-  pthread_mutex_init(&mutex, NULL);
-  Log *temp; 
-  temp = malloc( sizeof ( Log ) );
-  temp->hasFrog = FALSE;
-  temp->logID = getNextLogInId();
-  temp->log_mutex = mutex;
-  temp->x = SCR_TOP+4;
-  temp->y = 0;
+  while(game_running){
+  Log* top_log = generateDefaultLog();
+  pthread_t tID_curr;
 
-  for(t=0; t<NUM_TOP_LOG_THREADS; t++){
+  top_log->x = SCR_TOP+4;
+  insert(top_log_list, top_log);
 
-    if(type == TOP){
-      temp->x = SCR_TOP+4;
-      insert(top_log_list, temp);
-      rc = pthread_create(&threads[t], NULL, top_log_draw, (void *)temp);
-    }else if(type == MIDDLE_TOP){
-      temp->x = SCR_TOP+8;
-      insert(middle_top_log_list, temp);
-      rc = pthread_create(&threads[t], NULL, middletop_log_draw, (void *) temp);
-    }else if(type == MIDDLE_BOT){
-      temp->x = SCR_TOP+12;
-      temp->y = 0;
-      insert(middle_bot_log_list, temp);
-      rc = pthread_create(&threads[t], NULL, middlebot_log_draw, (void*) temp);
-    }else if(type == BOT){
-      temp->x = SCR_TOP+16;
-      temp->y = 0;
-      insert(bot_log_list, temp);
-      rc = pthread_create(&threads[t], NULL, bot_log_draw, (void*) temp);
-    }   
-    if (rc){
-     printf("ERROR-return code from pthread_create() in log draw is %d\n", rc);
-     exit(-1);
+  rc = pthread_create(&tID_curr, NULL, top_log_draw, (void *)top_log);
+
+  //lock on a new thread cond
+
+  mutex_lock(&top_log->new_log_mutex);
+  while(!top_log->newLog){
+    rc = pthread_cond_wait(&top_log->new_log_cond, &top_log->new_log_mutex);
+    checkResults("Failed at wait on new log with val: ", rc)
+  }
+  mutex_unlock(&top_log->new_log_mutex);
+
+  //create a new thread
+  create_top_logs();
+  
+  //lock on 'prepare to die' condition
+  mutex_lock(&top_log->log_mutex);
+   while(!top_log->conditionMet){
+      rc = pthread_cond_wait(&top_log->log_cond, &top_log->log_mutex);
+      checkResults("Failed at wait with val: ", rc)
    }
-   }// for
- }
+   mutex_unlock(&top_log->log_mutex);
+
+   //clean up procedures
+  removeWithId(top_log_list, top_log->logID);
+
+  rc = pthread_join(tID_curr, NULL);
+  checkResults("pthread_join()\n", rc);
+
+  }
+}
+
+void *create_middletop_logs(){
+  int rc = 0;
+
+  while(game_running){
+    Log* middle_top_log = generateDefaultLog();
+    pthread_t tID_curr;
+
+    middle_top_log->x = SCR_TOP+4;
+    insert(middle_top_log_list, middle_top_log);
+
+    rc = pthread_create(&tID_curr, NULL, middletop_log_draw, (void *)middle_top_log);
+
+  //lock on a new thread cond
+
+    mutex_lock(&middle_top_log->new_log_mutex);
+    while(!middle_top_log->newLog){
+      rc = pthread_cond_wait(&middle_top_log->new_log_cond, &middle_top_log->new_log_mutex);
+      checkResults("Failed at wait on new log with val: ", rc)
+    }
+    mutex_unlock(&middle_top_log->new_log_mutex);
+
+  //create a new thread
+    create_middletop_logs();
+
+  //lock on 'prepare to die' condition
+    mutex_lock(&middle_top_log->log_mutex);
+    while(!middle_top_log->conditionMet){
+      rc = pthread_cond_wait(&middle_top_log->log_cond, &middle_top_log->log_mutex);
+      checkResults("Failed at wait with val: ", rc)
+    }
+    mutex_unlock(&middle_top_log->log_mutex);
+
+   //clean up procedures
+    removeWithId(middle_top_log_list, middle_top_log->logID);
+
+    rc = pthread_join(tID_curr, NULL);
+    checkResults("pthread_join()\n", rc);
+  }
+}
+
+void *create_middlebot_logs(){
+  int rc = 0;
+
+  while(game_running){
+    Log* middle_bot_log = generateDefaultLog();
+    pthread_t tID_curr;
+
+    middle_bot_log->x = SCR_TOP+4;
+    insert(middle_bot_log_list, middle_bot_log);
+
+    rc = pthread_create(&tID_curr, NULL, middlebot_log_draw, (void *)middle_bot_log);
+
+  //lock on a new thread cond
+
+    mutex_lock(&middle_bot_log->new_log_mutex);
+    while(!middle_bot_log->newLog){
+      rc = pthread_cond_wait(&middle_bot_log->new_log_cond, &middle_bot_log->new_log_mutex);
+      checkResults("Failed at wait on new log with val: ", rc)
+    }
+    mutex_unlock(&middle_bot_log->new_log_mutex);
+
+  //create a new thread
+    create_middlebot_logs();
+
+  //lock on 'prepare to die' condition
+    mutex_lock(&middle_bot_log->log_mutex);
+    while(!middle_bot_log->conditionMet){
+      rc = pthread_cond_wait(&middle_bot_log->log_cond, &middle_bot_log->log_mutex);
+      checkResults("Failed at wait with val: ", rc)
+    }
+    mutex_unlock(&middle_bot_log->log_mutex);
+
+   //clean up procedures
+    removeWithId(middle_bot_log_list, middle_bot_log->logID);
+
+    rc = pthread_join(tID_curr, NULL);
+    checkResults("pthread_join()\n", rc);
+  }
+}
+
 
 
 

@@ -35,13 +35,13 @@ void destroy_mutex_var(pthread_mutex_t toDestroy){
 void mutex_lock(pthread_mutex_t* mutex){
     int rc = 0;
     rc = pthread_mutex_lock(mutex);
-    //checkResults("pthread_mutex_lock()\n", rc);
+    checkResults("pthread_mutex_lock()\n", rc);
 }
 
 void mutex_unlock(pthread_mutex_t *mutex){
     int rc = 0;
     rc = pthread_mutex_unlock(mutex);
-    //checkResults("pthread_mutex_unlock()\n", rc);
+    checkResults("pthread_mutex_unlock()\n", rc);
 }
 
 #endif /* MYMUTEX_H */

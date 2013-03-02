@@ -43,8 +43,14 @@ struct LOG
   int y;
   int logID;
   boolean hasFrog;
+  pthread_t tID;
   //enum type;
+  int newLog;
+  int conditionMet;
   pthread_mutex_t log_mutex;
+  pthread_mutex_t new_log_mutex;
+  pthread_cond_t log_cond;
+  pthread_cond_t new_log_cond;
   pthread_mutexattr_t log_attr;
 };
 
