@@ -4,6 +4,7 @@
 #include "console.h"
 #include "indexed_list.h"
 
+#define NUM_MAIN_THREADS 4
 #define NUM_SCREEN_THREADS 1
 #define NUM_TOP_LOG_THREADS 1
 
@@ -16,11 +17,12 @@ static char *frog_eyes_closed[] = {"--", "<>"};
 
 static pthread_t threads[100000];
 static pthread_t main_threads[4];
+static pthread_t log_threads[4];
+static pthread_t 
 int t=0;
 
 static boolean game_running = TRUE;
-pthread_mutex_t game_lock = PTHREAD_MUTEX_INITIALIZER; //a lock for condition variable
-pthread_mutex_t log_lock = PTHREAD_MUTEX_INITIALIZER; //a lock logs condition variable
+pthread_mutex_t game_lock;
 pthread_cond_t main_cond = PTHREAD_COND_INITIALIZER;
 pthread_cond_t logs_cond = PTHREAD_COND_INITIALIZER;
 
@@ -54,10 +56,16 @@ List *bot_log_list;
 
 void *create_logs();
 void *screen_redraw();
-
+void *create_top_logs();
+void *create_middletop_logs();
+void *create_middlebot_logs();
+void *create_bot_logs();
 
 
 int main(int argc, char*argv[]) {
+
+  game_lock = inicialize_mutex_var(); //gives us a recursive lock
+
 
   top_log_list = construct();
   assert(top_log_list != NULL);
@@ -73,6 +81,7 @@ int main(int argc, char*argv[]) {
 
   int t = 0;
   int rc = 0;
+  int i = 0; 
 
 
   if (screen_init(40, 80)) {
@@ -81,7 +90,7 @@ int main(int argc, char*argv[]) {
    checkResults("Failed at log thread create with val: ", rc);
    t++;
 
-   rc = pthread_create(&threads[t], NULL, screen_redraw, NULL);
+   rc = pthread_create(&main_threads[t], NULL, screen_redraw, NULL);
    checkResults("Failed at screen thread create with val: ", rc);
    t++;
 
@@ -93,9 +102,18 @@ int main(int argc, char*argv[]) {
    }
    mutex_unlock(&game_lock);
 
-   printf("%s\n", "You got here!");
-    //getchar();
-    //screen_fini();
+   //join all together
+
+   printf("%s\n", "Joining threads in Main");
+   for (i=0; i<NUM_MAIN_THREADS; ++i) {
+    rc = pthread_join(main_threads[i], NULL);
+    checkResults("pthread_join()\n", rc);
+  }
+   
+  //destroy mutex and cond
+   
+
+  //screen_fini();
  }
  return 0;
 }
@@ -103,16 +121,40 @@ int main(int argc, char*argv[]) {
 void *create_logs(){
 
   //create 4 different log threads. 
-  //
-  enum LOG_TYPE logB = TOP; 
-  create_log_thread(logB);
-  logB = MIDDLE_TOP;
-  create_log_thread(logB);
-  logB = MIDDLE_BOT;
-  create_log_thread(logB);
-  logB = BOT;
-  create_log_thread(logB);
+  //has to manage 
+  int t = 0;
+  int rc = 0;
+  int i = 0;
+  
+  rc = pthread_create(&log_threads[t], NULL, create_top_logs, NULL);
+  checkResults("Failed at top log thread create with val: ", rc);
+  t++;
 
+  rc = pthread_create(&log_threads[t], NULL, create_middletop_logs, NULL);
+  checkResults("Failed at top log thread create with val: ", rc);
+  t++;
+
+  rc = pthread_create(&log_threads[t], NULL, create_middlebot_logs, NULL);
+  checkResults("Failed at top log thread create with val: ", rc);
+  t++;
+
+  rc = pthread_create(&log_threads[t], NULL, create_bot_logs, NULL);
+  checkResults("Failed at top log thread create with val: ", rc);
+  t++;
+
+  mutex_lock(&game_lock);
+   while(game_running){
+      rc = pthread_cond_wait(&logs_cond, &game_lock);
+      checkResults("Failed at wait with val: ", rc)
+   }
+   mutex_unlock(&game_lock);
+  
+
+   printf("%s\n", "Joining threads in Create Log");
+   for (i=0; i<NUM_MAIN_THREADS; ++i) {
+    rc = pthread_join(main_threads[i], NULL);
+    checkResults("pthread_join()\n", rc);
+  }
   //set up condition variables
   //go to sleep
   //wake up when a thread dies
@@ -241,7 +283,8 @@ void *top_log_draw(void *in_log){
     sleep_ticks(2);
   }
   removeWithId(top_log_list, curr_log->logID);
-  //I'm done, remove me and join me. 
+  //I'm done, pass the pointer of the struct back to creator
+  //
   pthread_exit(NULL);//kill a log thread
   
 }
@@ -335,6 +378,36 @@ void *bot_log_draw(void *in_log){
   removeWithId(bot_log_list, curr_log->logID);
   pthread_exit(NULL);//kill a log thread
   
+}
+
+Log* generateDefaultLog(){
+  int rc = 0;
+
+  pthread_mutex_t mutex;     
+  pthread_mutex_init(&mutex, NULL);
+  Log *temp; 
+  temp = malloc( sizeof ( Log ) );
+  temp->hasFrog = FALSE;
+  temp->logID = getNextLogInId();
+  temp->log_mutex = mutex;
+  temp->x = 0;
+  temp->y = 0;
+
+  return temp;
+}
+
+void *create_top_logs(){
+
+
+
+  Log* top_log = generateDefaultLog();
+
+  temp->x = SCR_TOP+4;
+  insert(top_log_list, temp);
+
+  rc = pthread_create(&threads[t], NULL, top_log_draw, (void *)temp);
+
+
 }
 
 
