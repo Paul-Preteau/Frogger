@@ -152,9 +152,6 @@ boolean removeFirst( List *list ){
 
 boolean removeWithId( List *list, int logId){
 	boolean rc = FALSE;
-	int isFound = -1;
-
-
     Node *curr = NULL;
     Node *prev = NULL;
 

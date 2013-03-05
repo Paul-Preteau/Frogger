@@ -6,7 +6,7 @@
 
 #define NUM_MAIN_THREADS 4
 #define NUM_SCREEN_THREADS 1
-#define NUM_TOP_LOG_THREADS 1
+#define NUM_LOG_THREADS 4
 
 #define LOG_HEIGHT 4
 
@@ -138,16 +138,17 @@ int main(int argc, char*argv[]) {
 
    //join all together
 
-   printf("%s\n", "Joining threads in Main");
-   for (i=0; i<NUM_MAIN_THREADS; ++i) {
+   for (i=0; i<NUM_MAIN_THREADS; i++) {
     rc = pthread_join(main_threads[i], NULL);
     checkResults("pthread_join()\n", rc);
   }
    
   //destroy mutex and cond
-   
+  
+  getchar();   
 
-  //screen_fini();
+  screen_fini();
+  exit(0);
  }
  return 0;
 }
@@ -243,18 +244,23 @@ void *create_logs(){
    mutex_unlock(&game_lock);
   
 
-   printf("%s\n", "Joining threads in Create Log");
-   for (i=0; i<NUM_MAIN_THREADS; ++i) {
-    rc = pthread_join(main_threads[i], NULL);
-    checkResults("pthread_join()\n", rc);
+   //printf("%s\n", "Joining threads in Create Log");
+   for (i=0; i<NUM_LOG_THREADS; ++i) {
+    rc = pthread_join(log_threads[i], NULL);
+    checkResults("pthread_join_logs()\n", rc);
   }
+
+
+    printf("%s\n", "Returned from LOG");
+
+  return NULL;
 }
 
 void *screen_redraw(){
 
   //critical section
 
-  while(1){ //change to gameStillOn
+  while(game_running){ //change to gameStillOn
     mutex_lock(&screen_mutex);
   //put_banner("Created Screen Thread");
     screen_refresh();
@@ -265,7 +271,7 @@ void *screen_redraw(){
 
   destroy_mutex_var(screen_mutex);
   
-  pthread_exit(NULL);//kill a refresh thread
+  return NULL;
 
 } // end screen_redraw
 
@@ -428,10 +434,11 @@ Log* generateDefaultLog(){
 void *create_top_logs(){
 
   int rc = 0;
+  pthread_t tID_curr;
 
   while(game_running){
   Log* top_log = generateDefaultLog();
-  pthread_t tID_curr;
+  
 
   top_log->x = SCR_TOP+4;
   insert(top_log_list, top_log);
@@ -656,7 +663,12 @@ void *draw_frog(){
     counter++;
     sleep_ticks(1);
   }
+ 
   destroy_mutex_var(frog_mutex);
+  pthread_cond_broadcast(&frog_cond);
+  frog_dead = 1;
+
+  
   return NULL;
 }
 
@@ -665,7 +677,7 @@ void *create_frog_thread(){
   pthread_t frog_thread;
   frog_cond_mutex = inicialize_mutex_var();
   pthread_cond_init(&frog_cond, NULL);
-  while(game_running == TRUE){
+  while(game_running){
      rc = pthread_create(&frog_thread, NULL, draw_frog, NULL);
     if (rc){
    printf("ERROR-return code from pthread_create() in log draw is %d\n", rc);
@@ -684,18 +696,7 @@ void *create_frog_thread(){
 
 
   }
-
-
- mutex_lock(&game_lock);
- while(game_running){
-  rc = pthread_cond_wait(&main_cond, &game_lock);
-  checkResults("Failed at wait with val: ", rc)
-}
-mutex_unlock(&game_lock);
-
-rc = pthread_join(frog_thread, NULL);
-checkResults("pthread_join()\n", rc);
-
+  return NULL;
 }
 
 boolean checkFrogOnLog(Log* log){
@@ -729,13 +730,11 @@ boolean checkRowForFrog(List *list_to_check){
             }
           }
 
-          //toReturn = TRUE;
-
   return toReturn;
 }
 
 void *keyboard_listen(){
-  while(1){
+  while(game_running){
 
     int received_char = getchar();
     char dig = (char)received_char;
@@ -816,17 +815,14 @@ void *keyboard_listen(){
     if(dig == 'q'){
       mutex_lock(&kbd_mutex);
       put_banner("quitter... ");
-      sleep_ticks(40);
+      //sleep_ticks(10);
       game_running = FALSE;
-      getchar();
-      screen_fini();//more quitting stuff to add here
       mutex_unlock(&kbd_mutex);
-      exit(1);
+      pthread_cond_broadcast(&main_cond);
+      
     }
   }
-  
-  
-  pthread_exit(NULL);
+  return NULL;
 }
 
 void *create_keyboard_thread(){
@@ -842,8 +838,9 @@ void *create_keyboard_thread(){
    mutex_unlock(&game_lock);
 
    rc = pthread_join(kbd_thread, NULL);
-    checkResults("pthread_join()\n", rc);
+    checkResults("pthread_join_keyboard()\n", rc);
 
+  return NULL;
 }
 
 
