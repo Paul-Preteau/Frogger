@@ -699,11 +699,49 @@ void *create_frog_thread(){
   return NULL;
 }
 
+boolean checkFrogOnLogDown(Log* log){
+
+  boolean isThere = FALSE; //it isn't there
+  int x = log->x;
+  int y = log->y;
+
+  mutex_lock(&frog_mutex);
+
+      if(frog_x <= x && frog_x >= x + LOG_HEIGHT+1 && frog_y >= y+LOG_WIDTH && frog_y <= y){
+        isThere = TRUE;
+      }
+  mutex_unlock(&frog_mutex);
+
+  return isThere;
+
+}
+
+
+boolean checkRowForFrogDown(List *list_to_check){
+
+  boolean toReturn = FALSE;
+
+        int i;
+        Log *curr;
+          for(i=0; i < size(list_to_check); i++){
+            curr = get(list_to_check, i);
+            if(checkFrogOnLogDown(curr) == TRUE){
+              toReturn = TRUE;
+            }
+          }
+
+  return toReturn;
+}
+
+
 boolean checkFrogOnLog(Log* log){
 
   boolean isThere = FALSE; //it isn't there
   int x = log->x;
   int y = log->y;
+
+  int tempFrogX = frog_x;
+  int tempFrogY = frog_y;
 
   mutex_lock(&frog_mutex);
 
@@ -777,13 +815,13 @@ void *keyboard_listen(){
         frog_level--;
 
         if(frog_level == 1){
-          frog_on_log = checkRowForFrog(bot_log_list);
+          frog_on_log = checkRowForFrogDown(bot_log_list);
           }else if(frog_level == 3){
-            frog_on_log = checkRowForFrog(middle_top_log_list);
+            frog_on_log = checkRowForFrogDown(middle_top_log_list);
           }else if(frog_level == 2){
-            frog_on_log = checkRowForFrog(middle_bot_log_list);
+            frog_on_log = checkRowForFrogDown(middle_bot_log_list);
           }else if(frog_level == 4){
-            frog_on_log = checkRowForFrog(top_log_list);
+            frog_on_log = checkRowForFrogDown(top_log_list);
           }
         }
       }
