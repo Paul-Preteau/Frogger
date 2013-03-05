@@ -16,7 +16,6 @@ static char *frog_eyes_closed = {"--"};
 static char *frog_eyes_opened = {"@@"};
 
 
-static pthread_t threads[100000];
 static pthread_t main_threads[4];
 static pthread_t log_threads[4];
 
@@ -39,6 +38,8 @@ int frog_y = SCR_WIDTH/2;
 int frog_y_new = SCR_WIDTH/2;
 int frog_level = 0;
 boolean frog_on_log = FALSE;
+
+int number_of_lives = 4;
 
 
 void start_screen_thread();
@@ -69,12 +70,20 @@ void *create_middletop_logs();
 void *create_middlebot_logs();
 void *create_bot_logs();
 
+void updateNumLives(){
+  mutex_lock(&screen_mutex);
+  char numLives = (char)(((int)'0')+number_of_lives);
+  put_string(&numLives, FROG_HOME_ROW, SCR_COL_LIVES, 1);
+  mutex_unlock(&screen_mutex);
+}
+
 
 int main(int argc, char*argv[]) {
 
   game_lock = inicialize_mutex_var(); //gives us a recursive lock
   frog_mutex = inicialize_mutex_var();
   kbd_mutex = inicialize_mutex_var();
+  screen_mutex = inicialize_mutex_var();
 
   //set default frog position
   
@@ -106,6 +115,10 @@ int main(int argc, char*argv[]) {
    rc = pthread_create(&main_threads[t], NULL, screen_redraw, NULL);
    checkResults("Failed at screen thread create with val: ", rc);
    t++;
+
+   //put number of lives on top of the screen
+   updateNumLives();
+   
 
    rc = pthread_create(&main_threads[t], NULL, create_frog_thread, NULL);
    checkResults("Failed at screen thread create with val: ", rc);
@@ -139,8 +152,8 @@ int main(int argc, char*argv[]) {
  return 0;
 }
 
-int checkForFrogLeft(int x, int y){
-  int isThere = 0; //it isn't there
+boolean checkForFrogLeft(int x, int y){
+  boolean isThere = FALSE; //it isn't there
 
   int row = 0;
   int col = 0;
@@ -150,7 +163,7 @@ int checkForFrogLeft(int x, int y){
     for(col = y; col < (y+LOG_WIDTH); col++){
       if(row == frog_x && col == frog_y && isThere == 0){
         
-        isThere = 1;
+        isThere = TRUE;
         frog_on_log = TRUE;
         int temp = frog_y-1;
 
@@ -164,15 +177,11 @@ int checkForFrogLeft(int x, int y){
     }
   }
 
-  if(isThere ==0){
-    frog_on_log = FALSE;
-  }
-
   return isThere;
 }
 
-int checkForFrogRight(int x, int y){
-  int isThere = 0; //it isn't there
+boolean checkForFrogRight(int x, int y){
+  boolean isThere = FALSE; //it isn't there
 
   int row = 0;
   int col = 0;
@@ -181,7 +190,7 @@ int checkForFrogRight(int x, int y){
   for(row = x; row < (x+LOG_HEIGHT); row++ ){
     for(col = y; col < (y+LOG_WIDTH); col++){
       if(row == frog_x && col == frog_y && isThere == 0){
-        isThere = 1;
+        isThere = TRUE;
         int temp = frog_y+1;
         frog_on_log = TRUE;
         if(temp <= (SCR_RIGHT-3) && temp >= (SCR_LEFT)){
@@ -195,10 +204,6 @@ int checkForFrogRight(int x, int y){
         }
       }
     }
-  }
-
-  if(isThere ==0){
-    frog_on_log = FALSE;
   }
 
   return isThere;
@@ -247,10 +252,6 @@ void *create_logs(){
 
 void *screen_redraw(){
 
-  //create a mutex
-
-  screen_mutex = inicialize_mutex_var();
-
   //critical section
 
   while(1){ //change to gameStillOn
@@ -278,7 +279,7 @@ void *top_log_draw(void *in_log){
     mutex_lock(&screen_mutex); //this might be too much
     screen_clear_image(curr_log->x, curr_log->y+1, LOG_WIDTH, LOG_HEIGHT);
     screen_draw_image(curr_log->x, curr_log->y, log_image, LOG_HEIGHT);
-    checkForFrogLeft(curr_log->x, curr_log->y);
+    curr_log->hasFrog = checkForFrogLeft(curr_log->x, curr_log->y);
     mutex_unlock(&screen_mutex); //this might be too much 
 
 
@@ -315,7 +316,7 @@ void *middletop_log_draw(void *in_log){
     curr_log->y = SCR_RIGHT-i;
     screen_clear_image(curr_log->x, curr_log->y-1, LOG_WIDTH, LOG_HEIGHT);
     screen_draw_image(curr_log->x, curr_log->y, log_image, LOG_HEIGHT);
-    checkForFrogRight(curr_log->x, curr_log->y);
+    curr_log->hasFrog = checkForFrogRight(curr_log->x, curr_log->y);
     mutex_unlock(&screen_mutex);
 
     if(i == 27*2){ //make a constant somewhere
@@ -347,7 +348,7 @@ void *middlebot_log_draw(void *in_log){
     curr_log->y = SCR_RIGHT-i;
     screen_clear_image(curr_log->x, curr_log->y+1, LOG_WIDTH, LOG_HEIGHT);
     screen_draw_image(curr_log->x, curr_log->y, log_image, LOG_HEIGHT);
-    checkForFrogLeft(curr_log->x, curr_log->y);
+    curr_log->hasFrog = checkForFrogLeft(curr_log->x, curr_log->y);
     mutex_unlock(&screen_mutex);
 
 
@@ -382,7 +383,7 @@ void *bot_log_draw(void *in_log){
     curr_log->y = SCR_RIGHT-i;
     screen_clear_image(curr_log->x, curr_log->y-1, LOG_WIDTH, LOG_HEIGHT);
     screen_draw_image(curr_log->x, curr_log->y, log_image, LOG_HEIGHT);
-    checkForFrogRight(curr_log->x, curr_log->y);
+    curr_log->hasFrog = checkForFrogRight(curr_log->x, curr_log->y);
     mutex_unlock(&screen_mutex);
 
     if(i == 27*2){ //make a constant somewhere
@@ -601,10 +602,26 @@ void *draw_frog(){
   int move_counter = 0;
   while(game_running){
 
-    if(frog_on_log == TRUE && frog_level > 0 && frog_level < 5){
+
+    if(frog_on_log == FALSE && frog_level > 0 && frog_level < 5){
       //decrement number of lives left
       //
-      //printf("%s\n", "you got here");
+      //clear the image of where you were
+      //
+      number_of_lives--;
+      updateNumLives();
+
+      if(number_of_lives == 0){
+        mutex_lock(&screen_mutex);
+        put_banner("You loose! Press 'Q' to quit");
+        mutex_unlock(&screen_mutex);
+
+        game_running = FALSE;
+        getchar();
+        screen_fini();//more quitting stuff to add here
+
+      }
+      
        frog_x = SCR_BOTTOM-2;//NUM_ROWS+15
        frog_x_new = SCR_BOTTOM-2;
        frog_y = SCR_WIDTH/2;
@@ -681,6 +698,42 @@ checkResults("pthread_join()\n", rc);
 
 }
 
+boolean checkFrogOnLog(Log* log){
+
+  boolean isThere = FALSE; //it isn't there
+  int x = log->x;
+  int y = log->y;
+
+  mutex_lock(&frog_mutex);
+
+      if(frog_x >= x && frog_x <= x + LOG_HEIGHT+1 && frog_y <= y+LOG_WIDTH && frog_y >= y){
+        isThere = TRUE;
+      }
+  mutex_unlock(&frog_mutex);
+
+  return isThere;
+
+}
+
+
+boolean checkRowForFrog(List *list_to_check){
+
+  boolean toReturn = FALSE;
+
+        int i;
+        Log *curr;
+          for(i=0; i < size(list_to_check); i++){
+            curr = get(list_to_check, i);
+            if(checkFrogOnLog(curr) == TRUE){
+              toReturn = TRUE;
+            }
+          }
+
+          //toReturn = TRUE;
+
+  return toReturn;
+}
+
 void *keyboard_listen(){
   while(1){
 
@@ -699,10 +752,18 @@ void *keyboard_listen(){
 
       if(frog_level < 5){
         frog_level++; 
-      }
-      
 
-    }
+        if(frog_level == 1){
+          frog_on_log = checkRowForFrog(bot_log_list);
+          }else if(frog_level == 3){
+            frog_on_log = checkRowForFrog(middle_top_log_list);
+          }else if(frog_level == 2){
+            frog_on_log = checkRowForFrog(middle_bot_log_list);
+          }else if(frog_level == 4){
+            frog_on_log = checkRowForFrog(top_log_list);
+          }
+        }
+      }
 
     if(dig == 's'){
       int temp = frog_x+4;
@@ -715,8 +776,18 @@ void *keyboard_listen(){
       }
       if(frog_level > 0){
         frog_level--;
+
+        if(frog_level == 1){
+          frog_on_log = checkRowForFrog(bot_log_list);
+          }else if(frog_level == 3){
+            frog_on_log = checkRowForFrog(middle_top_log_list);
+          }else if(frog_level == 2){
+            frog_on_log = checkRowForFrog(middle_bot_log_list);
+          }else if(frog_level == 4){
+            frog_on_log = checkRowForFrog(top_log_list);
+          }
+        }
       }
-    }
 
     if(dig == 'a'){
       int temp = frog_y-1;

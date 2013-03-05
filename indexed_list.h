@@ -44,7 +44,6 @@ struct LOG
   int logID;
   boolean hasFrog;
   pthread_t tID;
-  //enum type;
   int newLog;
   int conditionMet;
   pthread_mutex_t log_mutex;
@@ -265,6 +264,8 @@ void destroy( List *list )
 }
 
 void destroyNode( Node *node){
+
+//free conditions and mutexes
 
 	free(node->data);
 	free(node);
